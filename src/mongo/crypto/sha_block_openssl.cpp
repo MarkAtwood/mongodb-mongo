@@ -198,6 +198,20 @@ void computeHmacImplWithCtx(HmacContext* digestCtx,
                             std::initializer_list<ConstDataRange> input,
                             HashType* const output) {
     auto ctx = digestCtx->get();
+#if OPENSSL_VERSION_NUMBER > 0x30000000L
+    size_t outLen = 0;
+    fassert(40380,
+            digestCtx->hmacCtxInitFn(md, key, keyLen) == 1 &&
+                std::all_of(begin(input),
+                            end(input),
+                            [&](const auto& i) {
+                                return EVP_MAC_update(
+                                           ctx,
+                                           reinterpret_cast<const unsigned char*>(i.data()),
+                                           i.length()) == 1;
+                            }) &&
+                EVP_MAC_final(ctx, output->data(), &outLen, output->size()) == 1);
+#else
     fassert(40380,
             digestCtx->hmacCtxInitFn(md, key, keyLen) == 1 &&
                 std::all_of(begin(input),
@@ -208,6 +222,7 @@ void computeHmacImplWithCtx(HmacContext* digestCtx,
                                                    i.length()) == 1;
                             }) &&
                 HMAC_Final(ctx, output->data(), nullptr) == 1);
+#endif
 }
 
 template <typename HashType>

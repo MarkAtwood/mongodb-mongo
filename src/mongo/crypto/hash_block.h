@@ -24,7 +24,11 @@
 #include <absl/hash/hash.h>
 
 #if defined(MONGO_CONFIG_SSL) && (MONGO_CONFIG_SSL_PROVIDER == MONGO_CONFIG_SSL_PROVIDER_OPENSSL)
+#include <openssl/evp.h>
+#include <openssl/opensslv.h>
+#if OPENSSL_VERSION_NUMBER <= 0x30000000L
 #include <openssl/hmac.h>
+#endif
 #endif
 
 namespace [[MONGO_MOD_PUBLIC]] mongo {
@@ -54,6 +58,15 @@ public:
     int hmacCtxInitFn(const EVP_MD* md, const uint8_t* key, size_t keyLen);
     HmacContext();
     ~HmacContext();
+#if OPENSSL_VERSION_NUMBER > 0x30000000L
+    // On OpenSSL after 3.0.0 (matching the digest guard used elsewhere in this
+    // crypto backend) HMAC is computed through the provider-dispatched EVP_MAC
+    // API instead of the deprecated HMAC_CTX interface.
+    EVP_MAC_CTX* get();
+
+private:
+    EVP_MAC_CTX* hmac_ctx;
+#else
     HMAC_CTX* get();
 
 private:
@@ -61,6 +74,7 @@ private:
     // we cannot add a custom deleter for the unique pointer. Instead we
     // have to manage the lifetime of the ctx object manually.
     HMAC_CTX* hmac_ctx;
+#endif
 #endif
 private:
     bool getReuseKey();
